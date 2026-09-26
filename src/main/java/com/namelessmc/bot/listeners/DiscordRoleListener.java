@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.namelessmc.bot.Main;
+import com.namelessmc.bot.DiscordRoleSync;
 import com.namelessmc.bot.StaffRoleReconciliation;
 import com.namelessmc.bot.connections.BackendStorageException;
 import com.namelessmc.java_api.NamelessAPI;
@@ -147,7 +148,8 @@ public class DiscordRoleListener extends ListenerAdapter {
 
 		final Member member;
 		try {
-			member = guild.retrieveMemberById(userId).complete();
+			member = guild.retrieveMemberById(userId)
+					.useCache(false).timeout(15, TimeUnit.SECONDS).complete();
 		} catch (ErrorResponseException error) {
 			if (error.getErrorResponse() == ErrorResponse.UNKNOWN_MEMBER
 					&& Main.isStaffRoleReconciliationEnabled()) {
@@ -199,12 +201,18 @@ public class DiscordRoleListener extends ListenerAdapter {
 		
 		try {
 			try {
-				user.discord().syncRoles(addedRoleIds, removedRoleIds);
+				DiscordRoleSync.send(api, user, userId, addedRoleIds, removedRoleIds);
 				LOGGER.info("Sent roles for guild={} user={} add={} remove={}", guildId, userId, toString(addedRoleIds), toString(removedRoleIds));
 			} catch (final ApiException e) {
 				if (e.apiError() == ApiError.NAMELESS_INVALID_API_METHOD) {
-					LOGGER.warn("New role sync endpoint not supported, trying again with old endpoint");
 					final long[] roleIds = member.getRoles().stream().mapToLong(Role::getIdLong).toArray();
+					if (StaffRoleReconciliation.containsManagedRole(addedRoleIds)
+							|| StaffRoleReconciliation.containsManagedRole(removedRoleIds)
+							|| StaffRoleReconciliation.containsManagedRole(roleIds)) {
+						LOGGER.warn("Staff role sync endpoint unavailable for guild={} user={}; refusing legacy fallback", guildId, userId);
+						return;
+					}
+					LOGGER.warn("New role sync endpoint not supported, trying again with old endpoint");
 					user.discord().updateDiscordRoles(roleIds);
 					LOGGER.info("Sent roles for guild={} user={} to website: {}", guildId, userId, toString(roleIds));
 				} else {

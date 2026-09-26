@@ -2,8 +2,10 @@ package com.namelessmc.bot;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.namelessmc.java_api.NamelessAPI;
 import org.junit.jupiter.api.Test;
 
+import java.net.URI;
 import java.time.Instant;
 import java.util.Set;
 
@@ -92,5 +94,18 @@ class TestStaffRoleReconciliation {
         JsonObject wrongGuild = roster(now);
         assertThrows(IllegalArgumentException.class,
                 () -> StaffRoleReconciliation.parseSnapshot(wrongGuild, GUILD_ID + 1, now));
+    }
+
+    @Test
+    void bindsEveryStaffDeltaToTheObservedDiscordIdentity() throws Exception {
+        NamelessAPI api = NamelessAPI.builder(URI.create("https://example.invalid/api/v2/").toURL(),
+                "test-key").build();
+        JsonObject request = DiscordRoleSync.request(348173296640196609L,
+                new long[]{MODERATOR_ROLE}, new long[]{ADMIN_ROLE}, api);
+        assertEquals("348173296640196609", request.get("discord_id").getAsString());
+        assertEquals(MODERATOR_ROLE, request.getAsJsonArray("add").get(0).getAsLong());
+        assertEquals(ADMIN_ROLE, request.getAsJsonArray("remove").get(0).getAsLong());
+        assertEquals(true, StaffRoleReconciliation.containsManagedRole(new long[]{MODERATOR_ROLE}));
+        assertEquals(false, StaffRoleReconciliation.containsManagedRole(new long[]{919734331558199338L}));
     }
 }

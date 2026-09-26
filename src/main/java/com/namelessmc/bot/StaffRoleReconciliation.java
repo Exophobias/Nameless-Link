@@ -162,6 +162,17 @@ public final class StaffRoleReconciliation implements Runnable {
                 remove.stream().mapToLong(Long::longValue).toArray());
     }
 
+    public static boolean containsManagedRole(long[] roleIds) {
+        for (long roleId : roleIds) {
+            for (long managed : ROLE_IDS) {
+                if (roleId == managed) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     @Override
     public void run() {
         if (!RUNNING.compareAndSet(false, true)) {
@@ -246,7 +257,8 @@ public final class StaffRoleReconciliation implements Runnable {
             // The member list may have been chunked just before a role event. Confirm every
             // nonempty change against REST, including absences, before changing the forum.
             try {
-                member = guild.retrieveMemberById(account.discordId()).complete();
+                member = guild.retrieveMemberById(account.discordId())
+                        .useCache(false).timeout(15, TimeUnit.SECONDS).complete();
             } catch (ErrorResponseException error) {
                 if (error.getErrorResponse() != ErrorResponse.UNKNOWN_MEMBER) {
                     deferred++;
@@ -285,7 +297,7 @@ public final class StaffRoleReconciliation implements Runnable {
                     continue;
                 }
                 synchronized (DiscordRoleListener.roleSendLock(guildId)) {
-                    user.discord().syncRoles(delta.add(), delta.remove());
+                    DiscordRoleSync.send(api, user, account.discordId(), delta.add(), delta.remove());
                 }
                 changed++;
                 LOGGER.info("Reconciled staff roles for guild {} forum user {} ({} add, {} remove)",
