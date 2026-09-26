@@ -3,12 +3,14 @@ package com.namelessmc.bot.listeners;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.namelessmc.bot.Main;
+import com.namelessmc.bot.StaffRoleReconciliation;
 import com.namelessmc.bot.connections.BackendStorageException;
 import com.namelessmc.java_api.NamelessAPI;
 import com.namelessmc.java_api.NamelessUser;
@@ -19,18 +21,27 @@ import com.namelessmc.java_api.exception.NamelessException;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Role;
+import net.dv8tion.jda.api.exceptions.ErrorResponseException;
 import net.dv8tion.jda.api.events.guild.member.GuildMemberRoleAddEvent;
 import net.dv8tion.jda.api.events.guild.member.GuildMemberRoleRemoveEvent;
+import net.dv8tion.jda.api.events.guild.member.GuildMemberRemoveEvent;
 import net.dv8tion.jda.api.events.role.RoleCreateEvent;
 import net.dv8tion.jda.api.events.role.RoleDeleteEvent;
 import net.dv8tion.jda.api.events.role.update.RoleUpdateNameEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
+import net.dv8tion.jda.api.requests.ErrorResponse;
 
 public class DiscordRoleListener extends ListenerAdapter {
 
 	private static final Logger LOGGER = LoggerFactory.getLogger("Group sync discord->website");
 
 	private static final Map<Long, Object> ROLE_SEND_LOCK = new HashMap<>();
+
+	public static Object roleSendLock(final long guildId) {
+		synchronized (ROLE_SEND_LOCK) {
+			return ROLE_SEND_LOCK.computeIfAbsent(guildId, ignored -> new Object());
+		}
+	}
 
 	/**
 	 * The website doesn't handle role endpoints being called multiple times at once, so we
@@ -40,14 +51,9 @@ public class DiscordRoleListener extends ListenerAdapter {
 	 * guildId have finished processing.
 	 */
 	private static void executeAsyncSynchronized(final long guildId, final Runnable runnable) {
-		synchronized(ROLE_SEND_LOCK) {
-			if (!ROLE_SEND_LOCK.containsKey(guildId)) {
-				ROLE_SEND_LOCK.put(guildId, new Object());
-			}
-		}
-
+		final Object lock = roleSendLock(guildId);
 		Main.getExecutorService().execute(() -> {
-			synchronized(ROLE_SEND_LOCK.get(guildId)) {
+			synchronized(lock) {
 				runnable.run();
 			}
 		});
@@ -98,6 +104,13 @@ public class DiscordRoleListener extends ListenerAdapter {
 	}
 
 	@Override
+	public void onGuildMemberRemove(final GuildMemberRemoveEvent event) {
+		if (Main.isStaffRoleReconciliationEnabled() && !event.getUser().isBot()) {
+			Main.getExecutorService().schedule(StaffRoleReconciliation.INSTANCE, 10, TimeUnit.SECONDS);
+		}
+	}
+
+	@Override
 	public void onGuildMemberRoleAdd(final GuildMemberRoleAddEvent event) {
 		final long userId = event.getUser().getIdLong();
 		final long guildId = event.getGuild().getIdLong();
@@ -132,7 +145,22 @@ public class DiscordRoleListener extends ListenerAdapter {
 			return;
 		}
 
-		final Member member = guild.retrieveMemberById(userId).complete();
+		final Member member;
+		try {
+			member = guild.retrieveMemberById(userId).complete();
+		} catch (ErrorResponseException error) {
+			if (error.getErrorResponse() == ErrorResponse.UNKNOWN_MEMBER
+					&& Main.isStaffRoleReconciliationEnabled()) {
+				Main.getExecutorService().schedule(StaffRoleReconciliation.INSTANCE, 10, TimeUnit.SECONDS);
+			} else {
+				LOGGER.warn("Discord member lookup failed for guild {} user {}: {}",
+						guildId, userId, error.getErrorResponse());
+			}
+			return;
+		} catch (RuntimeException error) {
+			LOGGER.warn("Discord member lookup failed for guild {} user {}", guildId, userId, error);
+			return;
+		}
 		if (member == null) {
 			LOGGER.warn("User {} no longer exists (left guild)?", userId);
 			return;

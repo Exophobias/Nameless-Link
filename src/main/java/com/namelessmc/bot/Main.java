@@ -66,6 +66,8 @@ public class Main {
 
 	private static ScheduledExecutorService executorService;
 	public static ScheduledExecutorService getExecutorService() { return executorService; }
+	private static boolean staffRoleReconciliationEnabled;
+	public static boolean isStaffRoleReconciliationEnabled() { return staffRoleReconciliationEnabled; }
 
 	private static ConnectionManager connectionManager;
 	public static ConnectionManager getConnectionManager() { return connectionManager; }
@@ -160,6 +162,7 @@ public class Main {
 		}
 
 		initializeConnectionManager();
+		staffRoleReconciliationEnabled = StorageInitializer.getEnvBoolean("ENABLE_STAFF_ROLE_RECONCILIATION", false);
 
 		String token = StorageInitializer.getEnvString("DISCORD_TOKEN", null);
 
@@ -209,6 +212,11 @@ public class Main {
 		}
 
 		Main.getExecutorService().scheduleAtFixedRate(new UsernameSync(), 6, 6, TimeUnit.HOURS);
+		if (staffRoleReconciliationEnabled) {
+			LOGGER.info("Discord staff-role reconciliation enabled: first pass in one minute, then every five minutes");
+			Main.getExecutorService().scheduleWithFixedDelay(
+					StaffRoleReconciliation.INSTANCE, 1, 5, TimeUnit.MINUTES);
+		}
 
 		new Metrics();
 	}
