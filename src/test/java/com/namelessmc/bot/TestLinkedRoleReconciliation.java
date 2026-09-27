@@ -135,4 +135,21 @@ class TestLinkedRoleReconciliation {
                 LinkedRoleReconciliation.withoutLinkedRole(new long[]{LINKED_ROLE,
                         665323333876973589L, 919734331558199338L}));
     }
+
+    @Test
+    void acceptsUnsignedDiscordSnowflakesUpToTheWebsiteProtocolLimit() throws Exception {
+        JsonObject maximum = roster();
+        maximum.getAsJsonArray("accounts").get(1).getAsJsonObject()
+                .addProperty("discord_id", "18446744073709551615");
+        maximum.addProperty("revision", revision(maximum.getAsJsonArray("accounts")));
+        assertEquals(ADD, LinkedRoleReconciliation.action(
+                LinkedRoleReconciliation.parseSnapshot(maximum, SERVER_ID, NOW),
+                "18446744073709551615", false, false, Set.of()));
+
+        maximum.getAsJsonArray("accounts").get(1).getAsJsonObject()
+                .addProperty("discord_id", "18446744073709551616");
+        maximum.addProperty("revision", revision(maximum.getAsJsonArray("accounts")));
+        assertThrows(IllegalArgumentException.class,
+                () -> LinkedRoleReconciliation.parseSnapshot(maximum, SERVER_ID, NOW));
+    }
 }
