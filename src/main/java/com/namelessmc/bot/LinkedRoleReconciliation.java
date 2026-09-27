@@ -196,7 +196,9 @@ public final class LinkedRoleReconciliation implements Runnable {
     private static boolean currentLinkMatches(NamelessAPI api, Account account) throws NamelessException {
         NamelessUser user = api.byIntegrationIdentifierLazy(StandardIntegrationTypes.DISCORD,
                 account.discordId());
-        if (user.id() != account.forumUserId() || !user.isVerified() || user.isBanned()) {
+        // The complete rank roster checks forum active=1. NamelessUser.isVerified()
+        // checks email validation, which is a different condition.
+        if (user.id() != account.forumUserId() || user.isBanned()) {
             return false;
         }
         Map<String, DetailedIntegrationData> integrations = user.integrations();
@@ -321,6 +323,18 @@ public final class LinkedRoleReconciliation implements Runnable {
             if (fresh == null) continue;
             Action action = action(snapshot, fresh);
             if (action == Action.NONE) continue;
+            // The complete roster is the authority for active-account state and
+            // exclusion records. Reconfirm its revision immediately before a write.
+            try {
+                if (!snapshot.revision().equals(fetch(api, serverId).revision())) {
+                    deferred++;
+                    continue;
+                }
+            } catch (NamelessException error) {
+                deferred++;
+                LOGGER.warn("Linked role roster confirmation deferred for user {}", fresh.getId(), error);
+                continue;
+            }
             if (action == Action.ADD) {
                 try {
                     if (!currentLinkMatches(api, snapshot.eligibleAccounts().get(fresh.getId()))) {
@@ -330,19 +344,6 @@ public final class LinkedRoleReconciliation implements Runnable {
                 } catch (NamelessException | RuntimeException error) {
                     deferred++;
                     LOGGER.warn("Linked role current link confirmation deferred for user {}", fresh.getId(), error);
-                    continue;
-                }
-            } else {
-                // Removal is driven by absence from a complete roster. Confirm a freshly
-                // generated roster still has the same revision immediately before removal.
-                try {
-                    if (!snapshot.revision().equals(fetch(api, serverId).revision())) {
-                        deferred++;
-                        continue;
-                    }
-                } catch (NamelessException error) {
-                    deferred++;
-                    LOGGER.warn("Linked role unlink confirmation deferred for user {}", fresh.getId(), error);
                     continue;
                 }
             }
