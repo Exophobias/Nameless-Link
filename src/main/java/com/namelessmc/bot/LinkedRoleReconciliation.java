@@ -196,9 +196,9 @@ public final class LinkedRoleReconciliation implements Runnable {
     private static boolean currentLinkMatches(NamelessAPI api, Account account) throws NamelessException {
         NamelessUser user = api.byIntegrationIdentifierLazy(StandardIntegrationTypes.DISCORD,
                 account.discordId());
-        // The complete rank roster checks forum active=1. NamelessUser.isVerified()
-        // checks email validation, which is a different condition.
-        if (user.id() != account.forumUserId() || user.isBanned()) {
+        // Core's UserInfoEndpoint exposes the forum active flag as "validated".
+        // Recheck it here in case the account was deactivated after the roster read.
+        if (user.id() != account.forumUserId() || !user.isVerified() || user.isBanned()) {
             return false;
         }
         Map<String, DetailedIntegrationData> integrations = user.integrations();
