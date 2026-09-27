@@ -30,3 +30,21 @@ mvn package
 cd target
 # find jar file here
 ```
+
+## Patriam Linked role
+
+The maintained Patriam fork can reconcile Discord role `1210696213981036574`
+from the website's complete `minecraft/link-ranks` roster. Set
+`ENABLE_LINKED_ROLE_RECONCILIATION=true` and `LINKED_ROLE_SERVER_ID=1` on the
+self-hosted Link process. It uses that process's existing Core API connection;
+the feature is disabled by default for other installations.
+
+Only an active forum account with both a verified Minecraft link and a verified
+Discord link receives Linked. A complete, fresh roster also removes Linked
+after either link is lost. The guild owner and holders of Patriam's Owner,
+Staff Manager, or Community Manager roles are excluded from both changes.
+The bot checks missed events at startup and every five minutes, and after
+successful `/verify` or a guild join. Its role changes do not flow back into
+the forum's Discord role mapper. Link's guild commands are upserted by name so
+another Patriam process using the same application can keep its commands;
+old Link-owned command names are not automatically deleted.

@@ -68,6 +68,10 @@ public class Main {
 	public static ScheduledExecutorService getExecutorService() { return executorService; }
 	private static boolean staffRoleReconciliationEnabled;
 	public static boolean isStaffRoleReconciliationEnabled() { return staffRoleReconciliationEnabled; }
+	private static boolean linkedRoleReconciliationEnabled;
+	public static boolean isLinkedRoleReconciliationEnabled() { return linkedRoleReconciliationEnabled; }
+	private static String linkedRoleServerId;
+	public static String getLinkedRoleServerId() { return Objects.requireNonNull(linkedRoleServerId); }
 
 	private static ConnectionManager connectionManager;
 	public static ConnectionManager getConnectionManager() { return connectionManager; }
@@ -163,6 +167,12 @@ public class Main {
 
 		initializeConnectionManager();
 		staffRoleReconciliationEnabled = StorageInitializer.getEnvBoolean("ENABLE_STAFF_ROLE_RECONCILIATION", false);
+		linkedRoleReconciliationEnabled = StorageInitializer.getEnvBoolean("ENABLE_LINKED_ROLE_RECONCILIATION", false);
+		linkedRoleServerId = StorageInitializer.getEnvString("LINKED_ROLE_SERVER_ID", "1");
+		if (linkedRoleReconciliationEnabled && (linkedRoleServerId.equals("0")
+				|| !linkedRoleServerId.matches("[A-Za-z0-9_.-]{1,32}"))) {
+			throw new IllegalArgumentException("LINKED_ROLE_SERVER_ID must be a valid nonzero server ID");
+		}
 
 		String token = StorageInitializer.getEnvString("DISCORD_TOKEN", null);
 
@@ -216,6 +226,11 @@ public class Main {
 			LOGGER.info("Discord staff-role reconciliation enabled: first pass in one minute, then every five minutes");
 			Main.getExecutorService().scheduleWithFixedDelay(
 					StaffRoleReconciliation.INSTANCE, 1, 5, TimeUnit.MINUTES);
+		}
+		if (linkedRoleReconciliationEnabled) {
+			LOGGER.info("Discord Linked-role reconciliation enabled for Minecraft server {}: first pass in one minute, then every five minutes", linkedRoleServerId);
+			Main.getExecutorService().scheduleWithFixedDelay(
+					LinkedRoleReconciliation.INSTANCE, 1, 5, TimeUnit.MINUTES);
 		}
 
 		new Metrics();

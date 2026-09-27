@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 
 import com.namelessmc.bot.Main;
 import com.namelessmc.bot.DiscordRoleSync;
+import com.namelessmc.bot.LinkedRoleReconciliation;
 import com.namelessmc.bot.StaffRoleReconciliation;
 import com.namelessmc.bot.connections.BackendStorageException;
 import com.namelessmc.java_api.NamelessAPI;
@@ -26,6 +27,7 @@ import net.dv8tion.jda.api.exceptions.ErrorResponseException;
 import net.dv8tion.jda.api.events.guild.member.GuildMemberRoleAddEvent;
 import net.dv8tion.jda.api.events.guild.member.GuildMemberRoleRemoveEvent;
 import net.dv8tion.jda.api.events.guild.member.GuildMemberRemoveEvent;
+import net.dv8tion.jda.api.events.guild.member.GuildMemberJoinEvent;
 import net.dv8tion.jda.api.events.role.RoleCreateEvent;
 import net.dv8tion.jda.api.events.role.RoleDeleteEvent;
 import net.dv8tion.jda.api.events.role.update.RoleUpdateNameEvent;
@@ -105,6 +107,13 @@ public class DiscordRoleListener extends ListenerAdapter {
 	}
 
 	@Override
+	public void onGuildMemberJoin(final GuildMemberJoinEvent event) {
+		if (Main.isLinkedRoleReconciliationEnabled() && !event.getUser().isBot()) {
+			Main.getExecutorService().schedule(LinkedRoleReconciliation.INSTANCE, 10, TimeUnit.SECONDS);
+		}
+	}
+
+	@Override
 	public void onGuildMemberRemove(final GuildMemberRemoveEvent event) {
 		if (Main.isStaffRoleReconciliationEnabled() && !event.getUser().isBot()) {
 			Main.getExecutorService().schedule(StaffRoleReconciliation.INSTANCE, 10, TimeUnit.SECONDS);
@@ -131,7 +140,14 @@ public class DiscordRoleListener extends ListenerAdapter {
 	}
 	
 	public static void sendUserRolesAsync(final long guildId, final long userId, final long[] addedRoleIds, final long[] removedRoleIds) {
-		executeAsyncSynchronized(guildId, () -> sendUserRoles(guildId, userId, addedRoleIds, removedRoleIds));
+		// Linked is derived from the website's verified Minecraft+Discord roster. Never
+		// report its bot-owned add/remove as a source role change back to the forum.
+		final long[] added = LinkedRoleReconciliation.withoutLinkedRole(addedRoleIds);
+		final long[] removed = LinkedRoleReconciliation.withoutLinkedRole(removedRoleIds);
+		if (added.length == 0 && removed.length == 0) {
+			return;
+		}
+		executeAsyncSynchronized(guildId, () -> sendUserRoles(guildId, userId, added, removed));
 	}
 	
 	private static String toString(long[] longArr) {
@@ -205,7 +221,8 @@ public class DiscordRoleListener extends ListenerAdapter {
 				LOGGER.info("Sent roles for guild={} user={} add={} remove={}", guildId, userId, toString(addedRoleIds), toString(removedRoleIds));
 			} catch (final ApiException e) {
 				if (e.apiError() == ApiError.NAMELESS_INVALID_API_METHOD) {
-					final long[] roleIds = member.getRoles().stream().mapToLong(Role::getIdLong).toArray();
+					final long[] roleIds = LinkedRoleReconciliation.withoutLinkedRole(
+							member.getRoles().stream().mapToLong(Role::getIdLong).toArray());
 					if (StaffRoleReconciliation.containsManagedRole(addedRoleIds)
 							|| StaffRoleReconciliation.containsManagedRole(removedRoleIds)
 							|| StaffRoleReconciliation.containsManagedRole(roleIds)) {

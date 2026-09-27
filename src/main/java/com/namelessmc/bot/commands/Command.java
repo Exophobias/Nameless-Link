@@ -9,6 +9,7 @@ import net.dv8tion.jda.api.interactions.commands.build.CommandData;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -53,7 +54,15 @@ public abstract class Command {
 			commands[i] = COMMANDS[i].getCommandData(language);
 		}
 
-		guild.updateCommands().addCommands(commands).complete();
+		upsertCommands(guild, List.of(commands));
+	}
+
+	// Both Link and DiscordSRV use the same Patriam application. Discord's bulk
+	// updateCommands operation deletes guild commands registered by the other process.
+	static void upsertCommands(final Guild guild, final List<CommandData> commands) {
+		for (final CommandData command : commands) {
+			guild.upsertCommand(command).complete();
+		}
 	}
 
 	public static Command getCommand(final String name) {

@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 
 import com.namelessmc.bot.Language;
 import com.namelessmc.bot.Main;
+import com.namelessmc.bot.LinkedRoleReconciliation;
 import com.namelessmc.bot.listeners.DiscordRoleListener;
 import com.namelessmc.java_api.NamelessAPI;
 import com.namelessmc.java_api.exception.ApiError;
@@ -28,6 +29,8 @@ import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
+
+import java.util.concurrent.TimeUnit;
 
 public class VerifyCommand extends Command {
 
@@ -94,6 +97,9 @@ public class VerifyCommand extends Command {
 		if (this.verifyIntegration(hook, language, api, new DiscordIntegrationData(userId, username), token, false)) {
 			LOGGER.info("Verified user {} in guild {}", username, guildId);
 			DiscordRoleListener.sendUserRolesAsync(guildId, userId, roleIds, new long[0]);
+			if (Main.isLinkedRoleReconciliationEnabled()) {
+				Main.getExecutorService().schedule(LinkedRoleReconciliation.INSTANCE, 10, TimeUnit.SECONDS);
+			}
 		}
 	}
 }
