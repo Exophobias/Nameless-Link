@@ -16,8 +16,6 @@ import com.namelessmc.bot.StaffRoleReconciliation;
 import com.namelessmc.bot.connections.BackendStorageException;
 import com.namelessmc.java_api.NamelessAPI;
 import com.namelessmc.java_api.NamelessUser;
-import com.namelessmc.java_api.exception.ApiError;
-import com.namelessmc.java_api.exception.ApiException;
 import com.namelessmc.java_api.exception.NamelessException;
 
 import net.dv8tion.jda.api.entities.Guild;
@@ -216,28 +214,12 @@ public class DiscordRoleListener extends ListenerAdapter {
 		}
 		
 		try {
-			try {
-				DiscordRoleSync.send(api, user, userId, addedRoleIds, removedRoleIds);
-				LOGGER.info("Sent roles for guild={} user={} add={} remove={}", guildId, userId, toString(addedRoleIds), toString(removedRoleIds));
-			} catch (final ApiException e) {
-				if (e.apiError() == ApiError.NAMELESS_INVALID_API_METHOD) {
-					final long[] roleIds = LinkedRoleReconciliation.withoutLinkedRole(
-							member.getRoles().stream().mapToLong(Role::getIdLong).toArray());
-					if (StaffRoleReconciliation.containsManagedRole(addedRoleIds)
-							|| StaffRoleReconciliation.containsManagedRole(removedRoleIds)
-							|| StaffRoleReconciliation.containsManagedRole(roleIds)) {
-						LOGGER.warn("Staff role sync endpoint unavailable for guild={} user={}; refusing legacy fallback", guildId, userId);
-						return;
-					}
-					LOGGER.warn("New role sync endpoint not supported, trying again with old endpoint");
-					user.discord().updateDiscordRoles(roleIds);
-					LOGGER.info("Sent roles for guild={} user={} to website: {}", guildId, userId, toString(roleIds));
-				} else {
-					throw e;
-				}
-			}
+			DiscordRoleSync.send(api, user, userId, addedRoleIds, removedRoleIds);
+			LOGGER.info("Sent roles for guild={} user={} add={} remove={}", guildId, userId, toString(addedRoleIds), toString(removedRoleIds));
 		} catch (final NamelessException e) {
-			Main.logConnectionError(LOGGER, "Website communication error while sending role update: user=" + userId + " guild=" + guildId + " (setDiscordRoles)", e);
+			// NamelessMC 2.2+ binds role changes to this observed Discord identity.
+			// Never fall back to the removed, unscoped discord/set-roles endpoint.
+			Main.logConnectionError(LOGGER, "Website communication error while sending role update: user=" + userId + " guild=" + guildId + " (syncDiscordRoles)", e);
 		}
 	}
 
