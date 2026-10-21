@@ -265,7 +265,7 @@ public final class LinkedRoleReconciliation implements Runnable {
         }
         final List<Member> members;
         try {
-            members = guild.findMembers(member -> true).setTimeout(2, TimeUnit.MINUTES).get();
+            members = ReconciliationMembers.INSTANCE.complete(guild);
             if (members.size() != guild.getMemberCount()
                     || members.stream().map(Member::getId).distinct().count() != members.size()) {
                 LOGGER.warn("Linked role reconciliation skipped for guild {}: Discord member list incomplete", guildId);

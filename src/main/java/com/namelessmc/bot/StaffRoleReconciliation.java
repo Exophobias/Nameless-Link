@@ -220,7 +220,7 @@ public final class StaffRoleReconciliation implements Runnable {
 
         final Map<Long, Member> members;
         try {
-            members = guild.findMembers(member -> true).setTimeout(2, TimeUnit.MINUTES).get().stream()
+            members = ReconciliationMembers.INSTANCE.complete(guild).stream()
                     .collect(Collectors.toMap(Member::getIdLong, member -> member));
             if (members.size() != guild.getMemberCount()) {
                 LOGGER.warn("Staff role reconciliation skipped for guild {}: member list incomplete ({} of {})",

@@ -48,3 +48,11 @@ successful `/verify` or a guild join. Its role changes do not flow back into
 the forum's Discord role mapper. Link's guild commands are upserted by name so
 another Patriam process using the same application can keep its commands;
 old Link-owned command names are not automatically deleted.
+
+Staff and Linked reconciliation share one complete Discord member-list request per
+guild for up to 35 seconds, including concurrent scheduled and event-triggered
+passes. Incomplete, duplicate, cross-guild or failed results are rejected; a failed
+request does not trigger an immediate retry burst. Every proposed role or forum
+group change still receives its existing fresh REST and account-identity checks.
+This avoids duplicate ALL-members gateway requests inside Discord's
+[per-guild request limit](https://discord.com/developers/docs/change-log#introducing-rate-limit-when-requesting-all-guild-members).
